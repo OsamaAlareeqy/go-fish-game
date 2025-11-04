@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Fish! Multi-Player Card Game</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #2cc02c;
+            color: #f7fafc;
+        }
+
+        .card {
+            width: 70px;
+            height: 100px;
+            background-color: white;
+            border: 3px solid #1a202c;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 900;
+            font-size: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            user-select: none;
+            position: relative; 
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .card.selected {
+            outline: 4px solid #FFD700; 
+            box-shadow: 0 0 20px rgba(255,215,0,0.8);
+            transform: translateY(-8px) scale(1.05);
+            z-index: 10;
+        }
+
+        .card-back {
+            background-color: #A00000; 
+            background-image: repeating-linear-gradient(45deg, #CC0000, #CC0000 10px, #A00000 10px, #A00000 20px);
+            color: white;
+            font-size: 5%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            border-color: #8B0000;
+        }
+
+        .book-pile {
+            min-width: 60px;
+            min-height: 90px;
+            border: 3px dashed #a0aec0;
+            background-color: rgba(255,255,255,0.1); 
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            font-size: 1.25rem;
+            color: #edf2f7;
+            margin-right: 8px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .red-suit {
+            color: #e53e3e;
+        }
+
+        .message-box {
+  
+            position:fixed;
+            top: 20%; 
+            left: 50%;
+            transform: translate(-50%, 0); 
+            z-index: 100; 
+            max-width: 400px;
+            width: 90vw; 
+        }
+        .hidden {
+            display: none;
+        }
+
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: #333;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border: 3px solid transparent; 
+        }
+
+        .avatar.current-turn {
+            border-color: #FFD700; 
+            box-shadow: 0 0 15px rgba(255,215,0,0.8);
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #ai-players-container {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .ai-player-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s; 
+        }
+
+        .ai-player-area.targetable {
+            cursor: pointer;
+            background-color: rgba(56, 189, 248, 0.3); 
+            border: 4px solid #38bdf8; 
+            outline: 4px solid #38bdf8;
+            outline-offset: 4px;
+            animation: pulse-border 1s infinite alternate; 
+            transform: scale(1.02); 
+        }
+
+        .ai-player-area.targetable:hover {
+            background-color: rgba(56, 189, 248, 0.5);
+            transform: scale(1.05); 
+        }
+
+        @keyframes pulse-border {
+            from { border-color: #38bdf8; }
+            to { border-color: #ffffff; }
+        }
+
+        #player-hand {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px; 
+            justify-content: center;
+            min-height: 100px;
+        }
+        #player-hand .card {
+            margin-bottom: 10px; 
+        }
+
+        /* Floating Ask controls */
+        #asking-controls-modal {
+            position: fixed;
+            bottom: 20px;
+            left: 500%;
+            transform: translateX(-50%);
+            z-index: 50;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            border: 2px solid #3b82f6;
+            color: #1a202c;
+            animation: slideUp 0.3s ease-out;
+            max-width: 90vw;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateX(-50%) translateY(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .go-fish-icon {
+            width: 40px;
+            height: 40px;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col items-center">
+
+    
+    <header class="text-center mb-8">
+        <h1 class="text-4xl font-extrabold text-white mb-2">🃏 Go Fish!</h1>
+        <p class="text-lg text-gray-200" id="status-message">Click 'Start Game' to begin!</p>
+    </header>
+
+    
+    <main class="w-full max-w-6xl p-6 rounded-xl shadow-2xl border border-green-600 bg-green-700">
+
+        
+        <section id="ai-players-container" class="mb-8">
+            
+        </section>
+
+        
+        <section id="controls" class="mb-8 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0 bg-green-800 p-4 rounded-lg shadow-inner">
+            <button id="start-game-btn" onclick="startGame()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-200">
+                Start Game
+            </button>
+
+            
+            <div id="draw-pile-container" class="flex flex-col items-center">
+                <p class="text-sm font-semibold text-gray-200 mb-1">Draw Pile (Fish Pond)</p>
+                <div id="draw-pile" class="card card-back cursor-default flex-col shadow-inner">
+                    <span id="draw-count" class="text-2xl font-bold">52</span>
+                    <span class="text-xs">Cards</span>
+                </div>
+            </div>
+
+            
+            <div id="scoreboard" class="flex space-x-4">
+                
+            </div>
+        </section>
+
+        
+        <section id="player-area" class="border-t border-green-600 pt-6 mt-6">
+            <h2 class="text-xl font-bold mb-4 text-white">Your Hand</h2>
+            <div id="player-hand" class="flex flex-wrap gap-2 mb-6 border-b border-green-600 pb-6 min-h-[100px]">
+                <p class="text-gray-300 italic">Click 'Start Game' to deal cards.</p>
+            </div>
+
+            
+            <div id="asking-controls-modal" class="hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Your Turn!</h3>
+                <p class="text-gray-700 mb-4">First, click on one of your cards above to select the rank you want to ask for.</p>
+                <div class="flex flex-col md:flex-row items-center gap-3">
+                    <span class="font-medium text-gray-700">You have selected:</span>
+                    <span id="selected-rank-display" class="font-extrabold text-2xl text-blue-700">---</span>
+
+                    <button id="ask-target-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200 disabled:opacity-50" disabled>
+                        Choose a rank first...
+                    </button>
+                    <button id="go-fish-btn" onclick="playerGoFish()" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200 ml-auto hidden" disabled>
+                        Go Fish! <img src="https://www.flaticon.com/svg/static/icons/svg/805/805175.svg" alt="fish icon" class="go-fish-icon">
+                    </button>
+                </div> 
+            </div>
+        </section>
+
+    </main>
+
+    
+    <div id="message-modal" class="message-box bg-white p-6 rounded-xl shadow-2xl border-4 border-blue-500 text-center transition-opacity duration-300 hidden">
+        <h2 id="modal-title" class="text-2xl font-bold text-gray-800 mb-4"></h2>
+        <p id="modal-text" class="text-lg text-gray-600 mb-6"></p>
+        <button id="modal-close-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-200">
+            Continue
+        </button>
+    </div>
+
+    
+    <script>
+        let deck = [];
+        const players = [];  
+        let humanPlayer = null; 
+        let currentPlayerIndex = 0;
+        let selectedRankForAsk = null;
+
+        const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const SUITS = ['♥', '♦', '♣', '♠'];
+        const HAND_SIZE = 7;
+        const PLAYER_NAMES = ['Adam', 'Osama', 'Ahmad', 'Sarah']; 
+        const PLAYER_AVATARS = [
+            'https://api.multiavatar.com/Mike.svg',
+            'https://api.multiavatar.com/Lisa.svg',
+            'https://api.multiavatar.com/Bill.svg',
+            'https://api.multiavatar.com/Sarah.svg'
+        ]; 
+
+        const playerHandEl = document.getElementById('player-hand');
+        const aiPlayersContainerEl = document.getElementById('ai-players-container');
+        const drawPileEl = document.getElementById('draw-pile');
+        const drawCountEl = document.getElementById('draw-count');
+        const scoreboardEl = document.getElementById('scoreboard');
+        const statusMessageEl = document.getElementById('status-message');
+        const askingControlsModalEl = document.getElementById('asking-controls-modal');
+        const selectedRankDisplayEl = document.getElementById('selected-rank-display');
+        const askTargetBtn = document.getElementById('ask-target-btn');
+        const goFishBtn = document.getElementById('go-fish-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+
+        const messageModalEl = document.getElementById('message-modal');
+        const modalTitleEl = document.getElementById('modal-title');
+        const modalTextEl = document.getElementById('modal-text');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+
+
+        function Player(id, name, type, avatarUrl) {
+            this.id = id;
+            this.name = name;
+            this.type = type;
+            this.hand = [];
+            this.books = [];
+            this.avatarUrl = avatarUrl;
+        }
+
+ 
+        function createDeck() {
+            deck = [];
+            for (const rank of RANKS) {
+                for (const suit of SUITS) {
+                    deck.push({ rank, suit });
+                }
+            }
+        }
+
+        function shuffleDeck() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function dealCards() {
+            for (const player of players) {
+                player.hand = [];
+                for (let i = 0; i < HAND_SIZE; i++) {
+                    if (deck.length > 0) player.hand.push(deck.pop());
+                }
+                sortHand(player.hand);
+            }
+        }
+
+        function startGame() {
+            players.length = 0;
+            playerHandEl.innerHTML = '';
+            aiPlayersContainerEl.innerHTML = '';
+            scoreboardEl.innerHTML = '';
+            selectedRankForAsk = null;
+            currentPlayerIndex = 0;
+            askingControlsModalEl.classList.add('hidden');
+            startGameBtn.disabled = true;
+
+            createDeck();
+            shuffleDeck();
+
+            humanPlayer = new Player('player', 'You', 'human', 'https://api.multiavatar.com/You.svg');
+            players.push(humanPlayer);
+
+            const numAI = 3;
+            for (let i = 0; i < numAI; i++) {
+                const aiName = PLAYER_NAMES[i % PLAYER_NAMES.length];
+                const aiAvatar = PLAYER_AVATARS[i % PLAYER_AVATARS.length];
+                players.push(new Player(`ai-${i}`, aiName, 'ai', aiAvatar));
+            }
+
+            dealCards();
+
+            for (const player of players) {
+                checkAllBooks(player);
+            }
+
+            updateUI();
+            statusMessageEl.textContent = "Game started! It's your turn. Select a card from your hand to ask for a rank.";
+            highlightCurrentPlayer();
+        }
+        function getRankCount(hand, rank) {
+            return hand.filter(card => card.rank === rank).length;
+        }
+
+        function sortHand(hand) {
+             hand.sort((a, b) => {
+                const rankA = RANKS.indexOf(a.rank);
+                const rankB = RANKS.indexOf(b.rank);
+                if (rankA !== rankB) {
+                    return rankA - rankB;
+                }
+                return SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
+            });
+        }
+
+        function transferCards(giverPlayer, receiverPlayer, rank) {
+            const cardsGiven = giverPlayer.hand.filter(card => card.rank === rank);
+            giverPlayer.hand = giverPlayer.hand.filter(card => card.rank !== rank);
+            receiverPlayer.hand.push(...cardsGiven);
+            sortHand(receiverPlayer.hand);
+            return cardsGiven.length;
+        }
+
+
+        function checkAllBooks(player) {
+            let booksMade = 0;
+            const ranksInHand = [...new Set(player.hand.map(card => card.rank))];
+            let remainingCards = [...player.hand];
+
+            for (const rank of ranksInHand) {
+                const count = getRankCount(player.hand, rank);
+                if (count === 4) {
+                    booksMade++;
+                    player.books.push(rank);
+                    remainingCards = remainingCards.filter(card => card.rank !== rank);
+                }
+            }
+            player.hand = remainingCards;
+            return booksMade > 0;
+        }
+
+        function drawCard(player) {
+            if (deck.length > 0) {
+                const card = deck.pop();
+                player.hand.push(card);
+                sortHand(player.hand);
+                return card;
+            }
+            return null;
+        }
+
+
+        async function handleAsk(askingPlayer, targetPlayer, rank) {
+            const messageDelay = askingPlayer.type === 'human' ? 0 : 1500;
+            
+            statusMessageEl.textContent = `${askingPlayer.name} asks ${targetPlayer.name} for all ${rank}'s.`;
+            updateUI(); 
+
+            if (askingPlayer.type === 'ai') {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            let message = '';
+            let cardsTaken = transferCards(targetPlayer, askingPlayer, rank);
+
+            if (cardsTaken > 0) {
+                message = `${targetPlayer.name} gave ${askingPlayer.name} ${cardsTaken} ${rank}(s)!`;
+                await showMessage(`${askingPlayer.name} takes cards!`, message, messageDelay); 
+                const madeBook = checkAllBooks(askingPlayer);
+                if (madeBook) {
+                    message = `${askingPlayer.name} made one or more books with the cards received!`;
+                    await showMessage(`${askingPlayer.name} made a book!`, message, messageDelay);
+                }
+                updateUI();
+                return true; 
+            } else {
+                message = `${targetPlayer.name} says "Go Fish!" to ${askingPlayer.name}.`;
+                await showMessage("Go Fish!", message, messageDelay);
+                const drawnCard = drawCard(askingPlayer);
+                if (drawnCard) {
+                    message = `${askingPlayer.name} drew a card.`;
+                    if (drawnCard.rank === rank) {
+                        message += ` It was a ${drawnCard.rank}! ${askingPlayer.name} gets to ask again.`;
+                        await showMessage("Drew Asked Card!", message, messageDelay);
+                        checkAllBooks(askingPlayer); 
+                        updateUI();
+                        return true; 
+                    } else {
+                        message += ` It was a ${drawnCard.rank}. ${askingPlayer.name}'s turn ends.`;
+                        await showMessage("Turn Over", message, messageDelay);
+                    }
+                } else {
+                    message = `The draw pile is empty. ${askingPlayer.name}'s turn ends.`;
+                    await showMessage("Draw Pile Empty", message, messageDelay);
+                }
+                checkAllBooks(askingPlayer); 
+                updateUI();
+                return false; 
+            }
+        }
+
+        function disableAITargeting() {
+             const aiAreas = document.querySelectorAll('.ai-player-area');
+             aiAreas.forEach(area => {
+                 area.classList.remove('targetable');
+                 area.onclick = null; 
+            });
+        }
+
+
+        function selectRank(rank) {
+            if (!humanPlayer || players[currentPlayerIndex].type !== 'human') return; 
+
+            if (selectedRankForAsk === rank) {
+                selectedRankForAsk = null;
+                statusMessageEl.textContent = `Selection cleared. Choose a rank to ask for.`;
+            } else {
+                if (getRankCount(humanPlayer.hand, rank) === 0) {
+                     showMessage("Error", "You must have at least one card of the rank you are asking for!", 0); 
+                     return;
+                }
+                
+                selectedRankForAsk = rank;
+                statusMessageEl.textContent = `You have selected ${rank}. Now click on the player you want to ask!`;
+            }
+            
+            updateUI(); 
+        }
+
+
+        function handleTargetingUI() {
+            const isHumanTurn = players[currentPlayerIndex]?.type === 'human';
+
+            if (isHumanTurn) {
+                askingControlsModalEl.classList.remove('hidden');
+
+                if (humanPlayer.hand.length === 0) {
+                    goFishBtn.classList.remove('hidden');
+                    goFishBtn.disabled = false;
+                    askTargetBtn.classList.add('hidden'); 
+                    selectedRankDisplayEl.textContent = 'EMPTY HAND';
+                    disableAITargeting();
+                    return; 
+                } else {
+                    goFishBtn.classList.add('hidden');
+                    goFishBtn.disabled = true;
+                    askTargetBtn.classList.remove('hidden');
+                }
+
+
+                if (selectedRankForAsk) {
+                    selectedRankDisplayEl.textContent = selectedRankForAsk;
+                    askTargetBtn.disabled = false;
+                    askTargetBtn.textContent = `Ask player for ${selectedRankForAsk}'s`;
+
+                    const aiAreas = document.querySelectorAll('.ai-player-area');
+                    aiAreas.forEach(area => {
+                        area.classList.add('targetable');
+                        const targetId = area.dataset.playerId;
+                        area.onclick = () => playerAsk(targetId); 
+                    });
+                    
+                } else {
+                    selectedRankDisplayEl.textContent = '---';
+                    askTargetBtn.disabled = true;
+                    askTargetBtn.textContent = 'Choose a rank first...';
+                    disableAITargeting();
+                }
+            } else {
+                askingControlsModalEl.classList.add('hidden');
+                disableAITargeting();
+            }
+        }
+
+        async function playerAsk(targetPlayerId) {
+            if (!humanPlayer || players[currentPlayerIndex].type !== 'human' || !selectedRankForAsk) return;
+
+            const targetPlayer = players.find(p => p.id === targetPlayerId);
+            if (!targetPlayer) return;
+
+            disableAITargeting();
+            askingControlsModalEl.classList.add('hidden'); 
+
+            const askAgain = await handleAsk(humanPlayer, targetPlayer, selectedRankForAsk);
+
+            selectedRankForAsk = null; 
+
+            if (askAgain) {
+                if (humanPlayer.hand.length > 0) {
+                    statusMessageEl.textContent = `You got cards! Ask again (select a rank first).`;
+                } else {
+                    statusMessageEl.textContent = `You ran out of cards! You must 'Go Fish' if the deck is not empty.`;
+                }
+                updateUI(); 
+            } else {
+                endTurn();
+            }
+        }
+
+
+        async function playerGoFish() {
+            if (!humanPlayer || players[currentPlayerIndex].type !== 'human') return;
+
+            if (humanPlayer.hand.length > 0) {
+                showMessage("Hold On!", "You have cards in hand. You must select a card to ask for a rank, then ask a player.", 0); 
+                return;
+            }
+
+            askingControlsModalEl.classList.add('hidden');
+            let message = "You chose to Go Fish!";
+            const drawnCard = drawCard(humanPlayer);
+            if (drawnCard) {
+                message += ` You drew a ${drawnCard.rank}.`;
+                checkAllBooks(humanPlayer); 
+            } else {
+                message += ` The draw pile is empty!`;
+            }
+            updateUI();
+            await showMessage("Go Fish!", message, 0); 
+            endTurn();
+        }
+
+
+
+        async function aiTurn(aiPlayer) {
+            statusMessageEl.textContent = `${aiPlayer.name}'s turn...`;
+            updateUI();
+            await new Promise(resolve => setTimeout(resolve, 1500)); 
+
+            if (aiPlayer.hand.length === 0) {
+                let message = `${aiPlayer.name}'s hand is empty.`;
+                const drawnCard = drawCard(aiPlayer);
+                if (drawnCard) {
+                    message += ` They drew a card.`;
+                    checkAllBooks(aiPlayer);
+                } else {
+                    message += ` The draw pile is also empty.`;
+                }
+                updateUI();
+                await showMessage(`${aiPlayer.name}'s Hand Empty`, message, 1500); 
+                endTurn();
+                return;
+            }
+
+            const ranksInHand = [...new Set(aiPlayer.hand.map(card => card.rank))];
+            let rankToAsk = null;
+
+  
+            for (const rank of ranksInHand) {
+                if (getRankCount(aiPlayer.hand, rank) > 1) {
+                    rankToAsk = rank;
+                    break;
+                }
+            }
+            if (!rankToAsk && ranksInHand.length > 0) {
+                rankToAsk = ranksInHand[Math.floor(Math.random() * ranksInHand.length)];
+            }
+
+            if (!rankToAsk) {
+                await showMessage(`${aiPlayer.name} has no cards to ask for.`, "Skipping turn.", 1500); 
+                endTurn();
+                return;
+            }
+
+            const otherPlayers = players.filter(p => p.id !== aiPlayer.id);
+            const targetPlayer = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
+
+            const askAgain = await handleAsk(aiPlayer, targetPlayer, rankToAsk);
+
+            if (askAgain) {
+                aiTurn(aiPlayer);
+            } else {
+                endTurn();
+            }
+        }
+
+
+        async function endTurn() {
+            if (isGameOver()) {
+                endGame();
+                return;
+            }
+
+            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+            const nextPlayer = players[currentPlayerIndex];
+
+            selectedRankForAsk = null;
+            updateUI(); 
+
+            if (nextPlayer.hand.length === 0 && deck.length === 0) {
+
+                await showMessage("Player Skipped", `${nextPlayer.name} has no cards and the draw pile is empty. Their turn is skipped.`, 1500); 
+                endTurn(); 
+                return;
+            }
+
+            if (nextPlayer.type === 'human') {
+                statusMessageEl.textContent = "It's your turn. Select a card rank to ask for.";
+            } else {
+                statusMessageEl.textContent = `${nextPlayer.name}'s turn...`;
+                await aiTurn(nextPlayer); 
+            }
+        }
+
+
+        function isGameOver() {
+            const totalBooksMade = players.reduce((sum, p) => sum + p.books.length, 0);
+            const allBooksMade = (totalBooksMade === RANKS.length);
+
+            const allHandsEmpty = players.every(p => p.hand.length === 0);
+            const deckIsEmpty = (deck.length === 0);
+
+            return allBooksMade || (allHandsEmpty && deckIsEmpty);
+        }
+
+
+        async function endGame() {
+            let title, message;
+            let highestBooks = 0;
+            let winners = [];
+
+            for (const player of players) {
+                if (player.books.length > highestBooks) {
+                    highestBooks = player.books.length;
+                    winners = [player];
+                } else if (player.books.length === highestBooks && player.books.length > 0) {
+                    winners.push(player);
+                }
+            }
+
+            if (winners.length === 1) {
+                title = `${winners[0].name.toUpperCase()} WINS! 🎉`;
+                if (winners[0].id === 'player') {
+                    message = `You collected ${humanPlayer.books.length} books. Congratulations!`;
+                } else {
+                    message = `${winners[0].name} collected ${winners[0].books.length} books. Better luck next time!`;
+                }
+            } else if (winners.length > 1 && highestBooks > 0) {
+                title = "🤝 It's a Tie!";
+                message = `It's a tie between ${winners.map(w => w.name).join(' and ')} with ${highestBooks} books each!`;
+            } else {
+                title = "Game Over!";
+                message = "The game ended with no clear winner or books made.";
+            }
+
+            statusMessageEl.textContent = "Game Over. " + title;
+            askingControlsModalEl.classList.add('hidden');
+            startGameBtn.disabled = false;
+            startGameBtn.textContent = "Play Again";
+
+            await showMessage(title, message, 0); 
+        }
+
+        function renderCard(card, isPlayerHand = false) {
+            const el = document.createElement('div');
+            const isRed = (card.suit === '♥' || card.suit === '♦');
+            el.className = `card text-xl ${isRed ? 'red-suit' : 'text-gray-900'} hover:scale-105`;
+            el.innerHTML = `
+                <div class="flex flex-col items-center leading-none">
+                    <span class="text-xs absolute top-1 left-1">${card.rank}</span>
+                    <span class="text-xs absolute bottom-1 right-1">${card.rank}</span>
+                    <span class="text-xl">${card.rank}</span>
+                    <span class="text-sm">${card.suit}</span>
+                </div>
+            `;
+            if (isPlayerHand && players[currentPlayerIndex]?.type === 'human') {
+                el.onclick = () => selectRank(card.rank);
+            }
+            return el;
+        }
+
+        function renderPlayerHand() {
+            playerHandEl.innerHTML = '';
+            if (!humanPlayer) return; 
+
+            if (humanPlayer.hand.length === 0) {
+                playerHandEl.innerHTML = '<p class="text-gray-300 italic">Your hand is empty! You must Go Fish.</p>';
+            }
+            humanPlayer.hand.forEach(card => {
+                const cardEl = renderCard(card, true);
+                if (card.rank === selectedRankForAsk) {
+                    cardEl.classList.add('selected'); 
+                }
+                playerHandEl.appendChild(cardEl);
+            });
+        }
+
+        function renderAIPlayers() {
+            aiPlayersContainerEl.innerHTML = '';
+            const aiPlayers = players.filter(p => p.type === 'ai');
+
+            aiPlayers.forEach(player => {
+                const playerDiv = document.createElement('div');
+
+                playerDiv.className = `ai-player-area flex-shrink-0 relative`;
+                playerDiv.dataset.playerId = player.id; 
+
+                playerDiv.innerHTML = `
+                    <div class="avatar mb-2">
+                        <img src="${player.avatarUrl}" onerror="this.onerror=null;this.src='https://placehold.co/60x60/333/fff?text=${player.name.charAt(0)}';" alt="${player.name} Avatar">
+                    </div>
+                    <p class="text-white font-semibold text-lg mb-2">${player.name}</p>
+                    <div class="flex items-center space-x-2 mb-2">
+                        <span class="text-gray-200">Hand:</span>
+                        <div class="card card-back text-xs flex items-center justify-center">${player.hand.length}</div>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-1">
+                        ${player.books.map(rank => `<div class="book-pile text-sm px-2 py-1">${rank}</div>`).join('')}
+                    </div>
+                `;
+                aiPlayersContainerEl.appendChild(playerDiv);
+            });
+        }
+
+        function renderScoreboard() {
+            scoreboardEl.innerHTML = '';
+            players.forEach(player => {
+                const scoreDiv = document.createElement('div');
+                scoreDiv.className = `text-center p-3 rounded-lg shadow-inner ${player.type === 'human' ? 'bg-blue-100 text-blue-900' : 'bg-gray-100 text-gray-900'}`;
+                scoreDiv.innerHTML = `
+                    <p class="text-xs font-semibold">${player.name}'s Books</p>
+                    <p class="text-2xl font-extrabold">${player.books.length}</p>
+                `;
+                scoreboardEl.appendChild(scoreDiv);
+            });
+        }
+
+        function highlightCurrentPlayer() {
+            document.querySelectorAll('.avatar').forEach(avatarEl => {
+                avatarEl.classList.remove('current-turn');
+            });
+
+            const currentPlayer = players[currentPlayerIndex];
+            if (currentPlayer) {
+                if (currentPlayer.id !== 'player') {
+                    const aiPlayerArea = document.querySelector(`[data-player-id="${currentPlayer.id}"]`);
+                    if (aiPlayerArea) {
+                        const avatarEl = aiPlayerArea.querySelector('.avatar');
+                        if (avatarEl) {
+                            avatarEl.classList.add('current-turn');
+                        }
+                    }
+                }
+            }
+        }
+
+
+        function updateUI() {
+            renderPlayerHand();
+            renderAIPlayers();
+            renderScoreboard();
+            drawCountEl.textContent = deck.length;
+            drawPileEl.classList.toggle('opacity-50', deck.length === 0);
+            highlightCurrentPlayer();
+            handleTargetingUI(); 
+        }
+
+        function showMessage(title, text, autoCloseDelayMs = 0, onClose = () => {}) {
+            return new Promise(resolve => {
+                modalTitleEl.textContent = title;
+                modalTextEl.textContent = text;
+                messageModalEl.classList.remove('hidden');
+
+                startGameBtn.disabled = true; 
+                askTargetBtn.disabled = true;
+                goFishBtn.disabled = true;
+                disableAITargeting();
+
+                const closeModal = () => {
+                    messageModalEl.classList.add('hidden');
+                    modalCloseBtn.removeEventListener('click', closeModal);
+                    
+                    if (!isGameOver()) {
+                        updateUI(); 
+                    } else {
+                        startGameBtn.disabled = false;
+                    }
+                    onClose();
+                    resolve(); 
+                };
+
+                if (autoCloseDelayMs > 0) {
+                    modalCloseBtn.classList.add('hidden');
+                    setTimeout(closeModal, autoCloseDelayMs);
+                } else {
+                    modalCloseBtn.classList.remove('hidden');
+                    modalCloseBtn.addEventListener('click', closeModal);
+                }
+            });
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            drawCountEl.textContent = 52;
+            statusMessageEl.textContent = "Ready to play Go Fish! Click Start Game.";
+            askingControlsModalEl.classList.add('hidden');
+            startGameBtn.disabled = false; 
+        });
+
+    </script>
+</body>
+</html>
